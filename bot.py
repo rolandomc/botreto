@@ -1,68 +1,73 @@
 import os
 import random
 from telegram import Update
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
+from telegram.ext import Application, CommandHandler, ContextTypes
 from dotenv import load_dotenv
-import schedule
-import time
-import threading
+import datetime
 
 # Cargar variables de entorno
 load_dotenv()
 
 # Obtener el token del bot desde las variables de entorno
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-CHAT_ID = os.getenv("CHAT_ID")  # Opcional si quieres enviar mensajes a un chat específico
+CHAT_ID = int(os.getenv("CHAT_ID"))  # Si es un ID de grupo, asegúrate de incluir el número completo
 
 # Variables globales
 ahorros = 0
 
+
 # Función para enviar un número aleatorio diario
-def enviar_numero_diario(context: CallbackContext):
+async def enviar_numero_diario(context: ContextTypes.DEFAULT_TYPE):
     global ahorros
     numero = random.randint(1, 365)
     ahorros += numero
-    context.bot.send_message(chat_id=CHAT_ID or context.job.context, 
-                             text=f"Hoy debes ahorrar: {numero}.\nTotal acumulado: {ahorros}")
+    await context.bot.send_message(
+        chat_id=CHAT_ID,
+        text=f"Hoy debes ahorrar: {numero}.\nTotal acumulado: {ahorros}"
+    )
+
 
 # Función para agregar un número manualmente
-def agregar_manual(update: Update, context: CallbackContext):
+async def agregar_manual(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global ahorros
     try:
         numero = int(context.args[0])  # Capturar el número proporcionado por el usuario
         ahorros += numero
-        update.message.reply_text(f"Has agregado: {numero}.\nTotal acumulado: {ahorros}")
+        await update.message.reply_text(f"Has agregado: {numero}.\nTotal acumulado: {ahorros}")
     except (IndexError, ValueError):
-        update.message.reply_text("Por favor, proporciona un número válido. Ejemplo: /agregar 100")
+        await update.message.reply_text("Por favor, proporciona un número válido. Ejemplo: /agregar 100")
+
 
 # Función para consultar el total acumulado
-def consultar_total(update: Update, context: CallbackContext):
-    update.message.reply_text(f"Total acumulado: {ahorros}")
+async def consultar_total(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(f"Total acumulado: {ahorros}")
 
-# Configurar los handlers del bot
+
+# Configurar comandos y tareas
 def main():
-    updater = Updater(TELEGRAM_TOKEN)
-    dispatcher = updater.dispatcher
+    # Crear la aplicación del bot
+    application = Application.builder().token(TELEGRAM_TOKEN).build()
 
-    # Comandos
-    dispatcher.add_handler(CommandHandler("start", lambda update, _: update.message.reply_text("¡Hola! Soy tu bot de ahorro.")))
-    dispatcher.add_handler(CommandHandler("agregar", agregar_manual))
-    dispatcher.add_handler(CommandHandler("total", consultar_total))
+    # Registrar comandos
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("agregar", agregar_manual))
+    application.add_handler(CommandHandler("total", consultar_total))
 
-    # Configurar envío diario del número aleatorio
-    def enviar_diario():
-        schedule.every().day.at("08:00").do(lambda: enviar_numero_diario(updater.bot))
-
-        while True:
-            schedule.run_pending()
-            time.sleep(1)
-
-    # Crear un hilo para la tarea diaria
-    threading.Thread(target=enviar_diario, daemon=True).start()
+    # Configurar tarea diaria
+    hora_diaria = datetime.time(hour=8, minute=0)  # Cambia la hora si lo necesitas
+    application.job_queue.run_daily(enviar_numero_diario, time=hora_diaria)
 
     # Iniciar el bot
-    updater.start_polling()
-    updater.idle()
+    application.run_polling()
+
+
+# Mensaje de bienvenida
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("¡Hola! Soy tu bot de ahorro.\n\n"
+                                    "Comandos disponibles:\n"
+                                    "/agregar <número> - Agrega manualmente un monto al ahorro.\n"
+                                    "/total - Consulta el total acumulado.\n")
+
 
 if __name__ == "__main__":
     main()
