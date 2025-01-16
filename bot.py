@@ -10,7 +10,7 @@ load_dotenv()
 
 # Obtener el token del bot desde las variables de entorno
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-CHAT_ID = int(os.getenv("CHAT_ID"))  # Si es un ID de grupo, asegúrate de incluir el número completo
+
 
 # Variables globales
 ahorros = 0
